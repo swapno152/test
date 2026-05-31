@@ -183,6 +183,10 @@ export default function PairPalaceWebsite() {
     heroTitle: "Stylish shoes for every step of your day.",
     heroSubtitle: "Sneakers, crocs, formal shoes, sandals and sports shoes — all in one trusted online store.",
     heroImage: "https://images.unsplash.com/photo-1491553895911-0055eca6402d?q=80&w=1200&auto=format&fit=crop",
+    heroImages: "https://images.unsplash.com/photo-1491553895911-0055eca6402d?q=80&w=1200&auto=format&fit=crop
+https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=1200&auto=format&fit=crop
+https://images.unsplash.com/photo-1460353581641-37baddab0fa2?q=80&w=1200&auto=format&fit=crop
+https://images.unsplash.com/photo-1603487742131-4160ec999306?q=80&w=1200&auto=format&fit=crop",
     heroPrimaryButton: "{siteSettings.heroPrimaryButton}",
     heroSecondaryButton: "{siteSettings.heroSecondaryButton}",
     startingPriceLabel: "Starting From",
@@ -190,13 +194,14 @@ export default function PairPalaceWebsite() {
     offerLabel: "Special Offer",
     offerTitle: "Buy 2 pairs and get free delivery.",
     offerDescription: "Limited time offer for our online customers. Send us your size and preferred product through WhatsApp.",
-    offerButton: "{siteSettings.offerButton}",
+    offerButton: "Claim Offer",
     facebook: "facebook.com/pairpalace",
     location: "Bangladesh",
   };
   const [siteSettings, setSiteSettings] = useState(defaultSiteSettings);
   const [settingsForm, setSettingsForm] = useState(defaultSiteSettings);
   const [settingsMessage, setSettingsMessage] = useState("");
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -536,6 +541,26 @@ export default function PairPalaceWebsite() {
     URL.revokeObjectURL(url);
   };
 
+  const heroSlides = useMemo(() => {
+    const imageText = siteSettings.heroImages || siteSettings.heroImage || "";
+    const images = imageText
+      .split("
+")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return images.length ? images : [siteSettings.heroImage].filter(Boolean);
+  }, [siteSettings.heroImages, siteSettings.heroImage]);
+
+  useEffect(() => {
+    if (heroSlides.length <= 1) return undefined;
+    const timer = setInterval(() => {
+      setHeroSlideIndex((prev) => (prev + 1) % heroSlides.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [heroSlides.length]);
+
+  const activeHeroImage = heroSlides[heroSlideIndex % heroSlides.length] || siteSettings.heroImage;
+
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesSearch = product.name.toLowerCase().includes(query.toLowerCase()) || product.category.toLowerCase().includes(query.toLowerCase());
@@ -644,11 +669,25 @@ export default function PairPalaceWebsite() {
 
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7 }} className="relative">
               <div className="rounded-[2rem] bg-white/10 p-3 shadow-2xl backdrop-blur">
-                <img
-                  src={siteSettings.heroImage}
+                <motion.img
+                  key={activeHeroImage}
+                  src={activeHeroImage}
                   alt="Featured shoe collection"
+                  initial={{ opacity: 0, scale: 1.04 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.6 }}
                   className="h-[360px] w-full rounded-[1.5rem] object-cover md:h-[480px]"
                 />
+                <div className="absolute bottom-6 right-6 flex gap-2 rounded-full bg-white/80 px-3 py-2 backdrop-blur">
+                  {heroSlides.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setHeroSlideIndex(index)}
+                      className={`h-2.5 rounded-full transition-all ${index === heroSlideIndex ? "w-7 bg-slate-900" : "w-2.5 bg-slate-400"}`}
+                      aria-label={`Show hero shoe ${index + 1}`}
+                    />
+                  ))}
+                </div>
               </div>
               <div className="absolute -bottom-6 left-6 rounded-3xl bg-white p-5 text-slate-900 shadow-xl">
                 <p className="text-sm font-bold text-slate-500">{siteSettings.startingPriceLabel}</p>
@@ -906,7 +945,8 @@ export default function PairPalaceWebsite() {
                     <input value={settingsForm.heroBadge} onChange={(e) => setSettingsForm({ ...settingsForm, heroBadge: e.target.value })} placeholder="Hero badge" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
                     <input value={settingsForm.heroTitle} onChange={(e) => setSettingsForm({ ...settingsForm, heroTitle: e.target.value })} placeholder="Hero title" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
                     <textarea value={settingsForm.heroSubtitle} onChange={(e) => setSettingsForm({ ...settingsForm, heroSubtitle: e.target.value })} placeholder="Hero subtitle" rows="3" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900 md:col-span-2" />
-                    <input value={settingsForm.heroImage} onChange={(e) => setSettingsForm({ ...settingsForm, heroImage: e.target.value })} placeholder="Hero main image link / URL" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <input value={settingsForm.heroImage} onChange={(e) => setSettingsForm({ ...settingsForm, heroImage: e.target.value })} placeholder="Hero fallback main image link / URL" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <textarea value={settingsForm.heroImages} onChange={(e) => setSettingsForm({ ...settingsForm, heroImages: e.target.value })} placeholder="Hero slider image links — one image URL per line" rows="5" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900 md:col-span-2" />
                     <input value={settingsForm.heroPrimaryButton} onChange={(e) => setSettingsForm({ ...settingsForm, heroPrimaryButton: e.target.value })} placeholder="Hero first button text" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
                     <input value={settingsForm.heroSecondaryButton} onChange={(e) => setSettingsForm({ ...settingsForm, heroSecondaryButton: e.target.value })} placeholder="Hero second button text" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
                     <input value={settingsForm.startingPriceLabel} onChange={(e) => setSettingsForm({ ...settingsForm, startingPriceLabel: e.target.value })} placeholder="Starting price label" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
@@ -1188,7 +1228,7 @@ export default function PairPalaceWebsite() {
 
       <footer className="bg-slate-950 px-4 py-8 text-center text-sm font-medium text-slate-400 md:px-8">
         <p>© 2026 Pair Palace. All rights reserved.</p>
-        <p className="mt-2">Designed & Developed by Swapno</p>
+        <p className="mt-2">Designed & developed by Swapno</p>
       </footer>
     </div>
   );
