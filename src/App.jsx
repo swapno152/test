@@ -179,9 +179,14 @@ export default function PairPalaceWebsite() {
   const defaultSiteSettings = {
     businessName: "Pair Palace",
     slogan: "Step into comfort",
-    heroBadge: "{siteSettings.heroBadge}",
-    heroTitle: "{siteSettings.heroTitle}",
-    heroSubtitle: "{siteSettings.heroSubtitle}",
+    heroBadge: "New Collection 2026 • Cash on Delivery Available",
+    heroTitle: "Stylish shoes for every step of your day.",
+    heroSubtitle: "Sneakers, crocs, formal shoes, sandals and sports shoes — all in one trusted online store.",
+    heroImage: "https://images.unsplash.com/photo-1491553895911-0055eca6402d?q=80&w=1200&auto=format&fit=crop",
+    heroPrimaryButton: "{siteSettings.heroPrimaryButton}",
+    heroSecondaryButton: "{siteSettings.heroSecondaryButton}",
+    startingPriceLabel: "Starting From",
+    startingPrice: "690",
     offerLabel: "Special Offer",
     offerTitle: "Buy 2 pairs and get free delivery.",
     offerDescription: "Limited time offer for our online customers. Send us your size and preferred product through WhatsApp.",
@@ -619,13 +624,13 @@ export default function PairPalaceWebsite() {
           <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 md:grid-cols-2 md:px-8 md:py-24">
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="flex flex-col justify-center">
               <div className="mb-5 w-fit rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold backdrop-blur">
-                New Collection 2026 • Cash on Delivery Available
+                {siteSettings.heroBadge}
               </div>
               <h2 className="max-w-xl text-4xl font-black leading-tight tracking-tight md:text-6xl">
-                Stylish shoes for every step of your day.
+                {siteSettings.heroTitle}
               </h2>
               <p className="mt-5 max-w-lg text-base leading-7 text-slate-200 md:text-lg">
-                Sneakers, crocs, formal shoes, sandals and sports shoes — all in one trusted online store.
+                {siteSettings.heroSubtitle}
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <a href="#products" className="rounded-full bg-white px-6 py-3 text-center text-sm font-black text-slate-950 shadow-xl transition hover:-translate-y-0.5">
@@ -640,14 +645,14 @@ export default function PairPalaceWebsite() {
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7 }} className="relative">
               <div className="rounded-[2rem] bg-white/10 p-3 shadow-2xl backdrop-blur">
                 <img
-                  src="https://images.unsplash.com/photo-1491553895911-0055eca6402d?q=80&w=1200&auto=format&fit=crop"
+                  src={siteSettings.heroImage}
                   alt="Featured shoe collection"
                   className="h-[360px] w-full rounded-[1.5rem] object-cover md:h-[480px]"
                 />
               </div>
               <div className="absolute -bottom-6 left-6 rounded-3xl bg-white p-5 text-slate-900 shadow-xl">
-                <p className="text-sm font-bold text-slate-500">Starting From</p>
-                <p className="text-3xl font-black">৳690</p>
+                <p className="text-sm font-bold text-slate-500">{siteSettings.startingPriceLabel}</p>
+                <p className="text-3xl font-black">৳{siteSettings.startingPrice}</p>
               </div>
             </motion.div>
           </div>
@@ -894,13 +899,18 @@ export default function PairPalaceWebsite() {
               {adminTab === "settings" && (
                 <div className="rounded-[2rem] bg-white p-5 shadow-sm md:p-8">
                   <h3 className="text-2xl font-black">Website Settings</h3>
-                  <p className="mt-1 text-sm text-slate-500">Business name, hero text, Facebook and location change korte parba.</p>
+                  <p className="mt-1 text-sm text-slate-500">Header, hero section, main image, starting price, Facebook and location change korte parba.</p>
                   <form onSubmit={handleSaveSiteSettings} className="mt-5 grid gap-4 md:grid-cols-2">
                     <input value={settingsForm.businessName} onChange={(e) => setSettingsForm({ ...settingsForm, businessName: e.target.value })} placeholder="Business name" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
                     <input value={settingsForm.slogan} onChange={(e) => setSettingsForm({ ...settingsForm, slogan: e.target.value })} placeholder="Slogan" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
                     <input value={settingsForm.heroBadge} onChange={(e) => setSettingsForm({ ...settingsForm, heroBadge: e.target.value })} placeholder="Hero badge" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
                     <input value={settingsForm.heroTitle} onChange={(e) => setSettingsForm({ ...settingsForm, heroTitle: e.target.value })} placeholder="Hero title" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
                     <textarea value={settingsForm.heroSubtitle} onChange={(e) => setSettingsForm({ ...settingsForm, heroSubtitle: e.target.value })} placeholder="Hero subtitle" rows="3" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <input value={settingsForm.heroImage} onChange={(e) => setSettingsForm({ ...settingsForm, heroImage: e.target.value })} placeholder="Hero main image link / URL" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <input value={settingsForm.heroPrimaryButton} onChange={(e) => setSettingsForm({ ...settingsForm, heroPrimaryButton: e.target.value })} placeholder="Hero first button text" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    <input value={settingsForm.heroSecondaryButton} onChange={(e) => setSettingsForm({ ...settingsForm, heroSecondaryButton: e.target.value })} placeholder="Hero second button text" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    <input value={settingsForm.startingPriceLabel} onChange={(e) => setSettingsForm({ ...settingsForm, startingPriceLabel: e.target.value })} placeholder="Starting price label" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    <input value={settingsForm.startingPrice} onChange={(e) => setSettingsForm({ ...settingsForm, startingPrice: e.target.value })} placeholder="Starting price, example: 690" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
                     <input value={settingsForm.facebook} onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })} placeholder="Facebook link/text" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
                     <input value={settingsForm.location} onChange={(e) => setSettingsForm({ ...settingsForm, location: e.target.value })} placeholder="Location" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
                     {settingsMessage && <p className="rounded-2xl bg-emerald-50 p-3 text-sm font-bold text-emerald-700 md:col-span-2">{settingsMessage}</p>}
