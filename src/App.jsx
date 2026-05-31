@@ -11,6 +11,8 @@ import {
   collection,
   deleteDoc,
   doc,
+  updateDoc,
+  setDoc,
   getFirestore,
   onSnapshot,
   orderBy,
@@ -42,6 +44,7 @@ const defaultProducts = [
     sizes: "39-44",
     tag: "Best Seller",
     image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=1200&auto=format&fit=crop",
+    description: "Comfortable lightweight sneakers with soft cushioning for daily wear.",
   },
   {
     id: 2,
@@ -53,6 +56,7 @@ const defaultProducts = [
     sizes: "40-44",
     tag: "Formal",
     image: "https://images.unsplash.com/photo-1614252369475-531eba835eb1?q=80&w=1200&auto=format&fit=crop",
+    description: "Smart loafers for office, class, events and semi-formal outfits.",
   },
   {
     id: 3,
@@ -64,6 +68,7 @@ const defaultProducts = [
     sizes: "38-43",
     tag: "Comfort",
     image: "https://images.unsplash.com/photo-1603487742131-4160ec999306?q=80&w=1200&auto=format&fit=crop",
+    description: "Soft, easy-to-wear crocs for casual walking and daily comfort.",
   },
   {
     id: 4,
@@ -75,6 +80,7 @@ const defaultProducts = [
     sizes: "40-45",
     tag: "Premium",
     image: "https://images.unsplash.com/photo-1616406432452-07bc5938759d?q=80&w=1200&auto=format&fit=crop",
+    description: "Premium formal shoes suitable for office, meetings and special occasions.",
   },
   {
     id: 5,
@@ -86,6 +92,7 @@ const defaultProducts = [
     sizes: "39-44",
     tag: "New Arrival",
     image: "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?q=80&w=1200&auto=format&fit=crop",
+    description: "Flexible sports shoes made for running, gym and active daily use.",
   },
   {
     id: 6,
@@ -97,6 +104,7 @@ const defaultProducts = [
     sizes: "38-44",
     tag: "Budget Pick",
     image: "https://images.unsplash.com/photo-1603808033192-082d6919d3e1?q=80&w=1200&auto=format&fit=crop",
+    description: "Budget-friendly casual sandal with soft step comfort.",
   },
 ];
 
@@ -137,6 +145,8 @@ export default function PairPalaceWebsite() {
   const [adminError, setAdminError] = useState("");
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [adminTab, setAdminTab] = useState("products");
+  const [editingProductId, setEditingProductId] = useState(null);
   const [adminVisible, setAdminVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showBuyNowForm, setShowBuyNowForm] = useState(false);
@@ -164,7 +174,24 @@ export default function PairPalaceWebsite() {
     sizes: "39-44",
     tag: "New Arrival",
     image: "",
+    description: "",
   });
+  const defaultSiteSettings = {
+    businessName: "Pair Palace",
+    slogan: "Step into comfort",
+    heroBadge: "{siteSettings.heroBadge}",
+    heroTitle: "{siteSettings.heroTitle}",
+    heroSubtitle: "{siteSettings.heroSubtitle}",
+    offerLabel: "Special Offer",
+    offerTitle: "Buy 2 pairs and get free delivery.",
+    offerDescription: "Limited time offer for our online customers. Send us your size and preferred product through WhatsApp.",
+    offerButton: "{siteSettings.offerButton}",
+    facebook: "facebook.com/pairpalace",
+    location: "Bangladesh",
+  };
+  const [siteSettings, setSiteSettings] = useState(defaultSiteSettings);
+  const [settingsForm, setSettingsForm] = useState(defaultSiteSettings);
+  const [settingsMessage, setSettingsMessage] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -207,10 +234,23 @@ export default function PairPalaceWebsite() {
       }
     );
 
+    const unsubscribeSettings = onSnapshot(
+      doc(db, "settings", "site"),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = { ...defaultSiteSettings, ...snapshot.data() };
+          setSiteSettings(data);
+          setSettingsForm(data);
+        }
+      },
+      () => {}
+    );
+
     return () => {
       unsubscribeAuth();
       unsubscribeProducts();
       unsubscribeOrders();
+      unsubscribeSettings();
     }; 
   }, []);
 
@@ -235,7 +275,7 @@ export default function PairPalaceWebsite() {
     e.preventDefault();
     if (!isAdmin || !newProduct.name || !newProduct.price || !newProduct.image) return;
 
-    const productToAdd = {
+    const productToSave = {
       name: newProduct.name,
       category: newProduct.category,
       price: Number(newProduct.price),
@@ -244,10 +284,20 @@ export default function PairPalaceWebsite() {
       sizes: newProduct.sizes,
       tag: newProduct.tag,
       image: newProduct.image,
-      createdAt: serverTimestamp(),
+      description: newProduct.description,
+      updatedAt: serverTimestamp(),
     };
 
-    await addDoc(collection(db, "products"), productToAdd);
+    if (editingProductId) {
+      await updateDoc(doc(db, "products", editingProductId), productToSave);
+      setEditingProductId(null);
+    } else {
+      await addDoc(collection(db, "products"), {
+        ...productToSave,
+        createdAt: serverTimestamp(),
+      });
+    }
+
     setNewProduct({
       name: "",
       category: "Sneakers",
@@ -257,6 +307,39 @@ export default function PairPalaceWebsite() {
       sizes: "39-44",
       tag: "New Arrival",
       image: "",
+      description: "",
+    });
+  };
+
+  const handleEditProduct = (product) => {
+    setEditingProductId(product.id);
+    setAdminOpen(true);
+    setAdminTab("products");
+    setNewProduct({
+      name: product.name || "",
+      category: product.category || "Sneakers",
+      price: product.price || "",
+      oldPrice: product.oldPrice || "",
+      rating: product.rating || "4.8",
+      sizes: product.sizes || "39-44",
+      tag: product.tag || "New Arrival",
+      image: product.image || "",
+      description: product.description || "",
+    });
+  };
+
+  const handleCancelEditProduct = () => {
+    setEditingProductId(null);
+    setNewProduct({
+      name: "",
+      category: "Sneakers",
+      price: "",
+      oldPrice: "",
+      rating: "4.8",
+      sizes: "39-44",
+      tag: "New Arrival",
+      image: "",
+      description: "",
     });
   };
 
@@ -264,6 +347,29 @@ export default function PairPalaceWebsite() {
     if (!isAdmin) return;
     await deleteDoc(doc(db, "products", id));
   };
+
+  const handleToggleOrderConfirmed = async (orderId, checked) => {
+    if (!isAdmin) return;
+    await updateDoc(doc(db, "orders", orderId), {
+      status: checked ? "Confirmed" : "New",
+      confirmed: checked,
+    });
+  };
+
+  const handleSaveSiteSettings = async (e) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    await setDoc(doc(db, "settings", "site"), {
+      ...settingsForm,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    setSettingsMessage("Settings saved successfully.");
+    setTimeout(() => setSettingsMessage(""), 2500);
+  };
+
+  const totalSales = orders.reduce((total, order) => total + Number(order.totalAmount || order.productPrice || 0), 0);
+  const newOrdersCount = orders.filter((order) => order.status !== "Confirmed" && order.confirmed !== true).length;
+  const confirmedOrdersCount = orders.filter((order) => order.status === "Confirmed" || order.confirmed === true).length;
 
   const handleResetProducts = async () => {
     if (!isAdmin) return;
@@ -447,8 +553,8 @@ export default function PairPalaceWebsite() {
               <ShoppingBag className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight">Pair Palace</h1>
-              <p className="text-xs font-medium text-slate-500">Step into comfort</p>
+              <h1 className="text-xl font-black tracking-tight">{siteSettings.businessName}</h1>
+              <p className="text-xs font-medium text-slate-500">{siteSettings.slogan}</p>
             </div>
           </a>
 
@@ -616,6 +722,7 @@ export default function PairPalaceWebsite() {
                     </div>
                     <h3 className="text-lg font-black">{product.name}</h3>
                     <p className="mt-1 text-sm text-slate-500">Available sizes: {product.sizes}</p>
+                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{product.description || "Comfortable and stylish shoe for everyday use."}</p>
                     <div className="mt-4 flex items-center justify-between">
                       <div>
                         <span className="text-2xl font-black">৳{product.price}</span>
@@ -664,17 +771,14 @@ export default function PairPalaceWebsite() {
         <section id="admin" className="mx-auto max-w-7xl px-4 py-12 md:px-8">
           <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
-              <p className="mb-2 text-sm font-black uppercase tracking-[0.2em] text-slate-500">Admin Panel</p>
-              <h2 className="text-3xl font-black md:text-4xl">{isAdmin ? "Manage your shoes" : "Admin login"}</h2>
+              <p className="mb-2 text-sm font-black uppercase tracking-[0.2em] text-slate-500">Admin Dashboard</p>
+              <h2 className="text-3xl font-black md:text-4xl">{isAdmin ? "Business control panel" : "Admin login"}</h2>
               <p className="mt-2 text-sm text-slate-500">
-                {isAdmin ? "Tumi real admin account diye login kore acho. Ekhon product add/delete korle database-e save hobe." : "Visitor ra sudhu product dekhbe. Admin email/password dile product manage option show korbe."}
+                {isAdmin ? "Products, offers, orders and website text ek jayga theke manage koro." : "Secret admin link diye login korlei dashboard show korbe."}
               </p>
             </div>
             {isAdmin && (
-              <div className="flex gap-3">
-                <Button onClick={() => setAdminOpen(!adminOpen)} className="rounded-full bg-slate-900 px-6 py-3 font-black text-white hover:bg-slate-700">
-                  {adminOpen ? "Hide Form" : "Add New Shoe"}
-                </Button>
+              <div className="flex flex-wrap gap-3">
                 <Button onClick={handleAdminLogout} className="rounded-full bg-slate-200 px-6 py-3 font-black text-slate-900 hover:bg-slate-300">
                   Logout
                 </Button>
@@ -685,161 +789,138 @@ export default function PairPalaceWebsite() {
           {!isAdmin && (
             <div className="max-w-md rounded-[2rem] bg-white p-5 shadow-sm md:p-8">
               <form onSubmit={handleAdminLogin} className="space-y-4">
-                <input
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  placeholder="Admin email"
-                  type="email"
-                  className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
-                <input
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="Admin password"
-                  type="password"
-                  className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
+                <input value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="Admin email" type="email" className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                <input value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="Admin password" type="password" className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
                 {adminError && <p className="text-sm font-semibold text-red-600">{adminError}</p>}
-                <Button type="submit" className="w-full rounded-2xl bg-slate-900 font-black text-white hover:bg-slate-700">
-                  Login as Admin
-                </Button>
+                <Button type="submit" className="w-full rounded-2xl bg-slate-900 font-black text-white hover:bg-slate-700">Login as Admin</Button>
               </form>
-              <p className="mt-4 text-xs text-slate-500">Firebase Authentication-e je admin email/password create korba, oi login ekhane use korba.</p>
             </div>
           )}
 
-          {isAdmin && adminOpen && (
-            <div className="rounded-[2rem] bg-white p-5 shadow-sm md:p-8">
-              <form onSubmit={handleAddProduct} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <input
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                  placeholder="Shoe name"
-                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
-                <select
-                  value={newProduct.category}
-                  onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                >
-                  {categories.filter((cat) => cat !== "All").map((cat) => <option key={cat}>{cat}</option>)}
-                </select>
-                <input
-                  value={newProduct.price}
-                  onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                  placeholder="Price, example: 1490"
-                  type="number"
-                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
-                <input
-                  value={newProduct.oldPrice}
-                  onChange={(e) => setNewProduct({ ...newProduct, oldPrice: e.target.value })}
-                  placeholder="Old price, optional"
-                  type="number"
-                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
-                <input
-                  value={newProduct.sizes}
-                  onChange={(e) => setNewProduct({ ...newProduct, sizes: e.target.value })}
-                  placeholder="Sizes, example: 39-44"
-                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
-                <input
-                  value={newProduct.tag}
-                  onChange={(e) => setNewProduct({ ...newProduct, tag: e.target.value })}
-                  placeholder="Tag, example: New Arrival"
-                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
-                <input
-                  value={newProduct.rating}
-                  onChange={(e) => setNewProduct({ ...newProduct, rating: e.target.value })}
-                  placeholder="Rating, example: 4.8"
-                  type="number"
-                  step="0.1"
-                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
-                <input
-                  value={newProduct.image}
-                  onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
-                  placeholder="Image link / URL"
-                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900"
-                />
-                <Button type="submit" className="rounded-2xl bg-slate-900 font-black text-white hover:bg-slate-700 md:col-span-1">
-                  Add Product
-                </Button>
-                <Button type="button" onClick={handleResetProducts} className="rounded-2xl bg-slate-200 font-black text-slate-900 hover:bg-slate-300 md:col-span-1">
-                  Reset Demo Products
-                </Button>
-              </form>
-              <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                Tip: Facebook page বা Cloudinary/ImgBB এ photo upload করে image link এখানে paste করলেই product card এ image show করবে।
+          {isAdmin && (
+            <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-4">
+                <div className="rounded-3xl bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-500">Products</p><p className="mt-2 text-3xl font-black">{products.length}</p></div>
+                <div className="rounded-3xl bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-500">Total Orders</p><p className="mt-2 text-3xl font-black">{orders.length}</p></div>
+                <div className="rounded-3xl bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-500">New Orders</p><p className="mt-2 text-3xl font-black text-emerald-600">{newOrdersCount}</p></div>
+                <div className="rounded-3xl bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-500">Sales Value</p><p className="mt-2 text-3xl font-black">৳{totalSales}</p></div>
               </div>
+
+              <div className="flex flex-wrap gap-2 rounded-3xl bg-white p-3 shadow-sm">
+                {["products", "orders", "offers", "settings"].map((tab) => (
+                  <button key={tab} onClick={() => setAdminTab(tab)} className={`rounded-full px-5 py-2.5 text-sm font-black capitalize transition ${adminTab === tab ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {adminTab === "products" && (
+                <div className="rounded-[2rem] bg-white p-5 shadow-sm md:p-8">
+                  <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                    <div>
+                      <h3 className="text-2xl font-black">Product Management</h3>
+                      <p className="mt-1 text-sm text-slate-500">New product add, old product edit/delete korte parba.</p>
+                    </div>
+                    <Button onClick={() => setAdminOpen(!adminOpen)} className="rounded-full bg-slate-900 px-6 py-3 font-black text-white hover:bg-slate-700">
+                      {adminOpen ? "Hide Product Form" : "Add / Edit Product"}
+                    </Button>
+                  </div>
+
+                  {adminOpen && (
+                    <form onSubmit={handleAddProduct} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                      <input value={newProduct.name} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Shoe name" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <select value={newProduct.category} onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })} className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900">
+                        {categories.filter((cat) => cat !== "All").map((cat) => <option key={cat}>{cat}</option>)}
+                      </select>
+                      <input value={newProduct.price} onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })} placeholder="Price, example: 1490" type="number" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={newProduct.oldPrice} onChange={(e) => setNewProduct({ ...newProduct, oldPrice: e.target.value })} placeholder="Old price / discount price show" type="number" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={newProduct.sizes} onChange={(e) => setNewProduct({ ...newProduct, sizes: e.target.value })} placeholder="Sizes, example: 39-44" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={newProduct.tag} onChange={(e) => setNewProduct({ ...newProduct, tag: e.target.value })} placeholder="Tag, example: Best Seller" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={newProduct.rating} onChange={(e) => setNewProduct({ ...newProduct, rating: e.target.value })} placeholder="Rating, example: 4.8" type="number" step="0.1" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={newProduct.image} onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })} placeholder="Image link / URL" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <textarea value={newProduct.description} onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })} placeholder="Product description" rows="3" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900 md:col-span-2 lg:col-span-4" />
+                      <Button type="submit" className="rounded-2xl bg-slate-900 font-black text-white hover:bg-slate-700">{editingProductId ? "Update Product" : "Add Product"}</Button>
+                      {editingProductId && <Button type="button" onClick={handleCancelEditProduct} className="rounded-2xl bg-slate-200 font-black text-slate-900 hover:bg-slate-300">Cancel Edit</Button>}
+                      <Button type="button" onClick={handleResetProducts} className="rounded-2xl bg-slate-200 font-black text-slate-900 hover:bg-slate-300">Add Demo Products</Button>
+                    </form>
+                  )}
+
+                  <div className="mt-6 overflow-hidden rounded-3xl border border-slate-100">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[850px] text-left text-sm">
+                        <thead className="bg-slate-900 text-white"><tr><th className="p-4">Image</th><th className="p-4">Name</th><th className="p-4">Category</th><th className="p-4">Price</th><th className="p-4">Tag</th><th className="p-4">Action</th></tr></thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {products.map((product) => (
+                            <tr key={product.id}>
+                              <td className="p-4"><img src={product.image} alt={product.name} className="h-14 w-14 rounded-xl object-cover" /></td>
+                              <td className="p-4 font-black">{product.name}</td>
+                              <td className="p-4">{product.category}</td>
+                              <td className="p-4 font-bold">৳{product.price}</td>
+                              <td className="p-4">{product.tag}</td>
+                              <td className="p-4"><div className="flex gap-2"><button onClick={() => handleEditProduct(product)} className="rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-900 hover:bg-slate-200">Edit</button><button onClick={() => handleDeleteProduct(product.id)} className="rounded-full bg-red-50 px-4 py-2 text-xs font-black text-red-600 hover:bg-red-100">Delete</button></div></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {adminTab === "orders" && (
+                <div className="rounded-[2rem] bg-white p-5 shadow-sm md:p-8">
+                  <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                    <div><h3 className="text-2xl font-black">Order Management</h3><p className="mt-1 text-sm text-slate-500">Order confirm checkbox, total and customer details.</p></div>
+                    <Button onClick={exportOrdersToCSV} className="rounded-full bg-slate-900 px-6 py-3 font-black text-white hover:bg-slate-700"><Download className="mr-2 h-4 w-4" /> Export Excel/CSV</Button>
+                  </div>
+                  <div className="overflow-hidden rounded-3xl border border-slate-100"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-slate-900 text-white"><tr><th className="p-4">Product</th><th className="p-4">Customer</th><th className="p-4">Phone</th><th className="p-4">Size</th><th className="p-4">Qty</th><th className="p-4">Address</th><th className="p-4">Total</th><th className="p-4">Confirmed?</th><th className="p-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{orders.length === 0 && <tr><td className="p-4 text-slate-500" colSpan="9">No orders yet.</td></tr>}{orders.map((order) => (<tr key={order.id}><td className="p-4 font-bold">{order.productName}</td><td className="p-4">{order.customerName}</td><td className="p-4">{order.phone}</td><td className="p-4">{order.size}</td><td className="p-4">{order.quantity}</td><td className="p-4">{order.address}</td><td className="p-4 font-black">৳{order.totalAmount || order.productPrice || 0}</td><td className="p-4"><label className="flex items-center gap-2 text-xs font-black text-slate-700"><input type="checkbox" checked={order.status === "Confirmed" || order.confirmed === true} onChange={(e) => handleToggleOrderConfirmed(order.id, e.target.checked)} className="h-5 w-5 rounded border-slate-300" /> Confirmed</label></td><td className="p-4"><span className={`rounded-full px-3 py-1 text-xs font-black ${order.status === "Confirmed" || order.confirmed === true ? "bg-blue-50 text-blue-700" : "bg-emerald-50 text-emerald-700"}`}>{order.status || "New"}</span></td></tr>))}</tbody></table></div></div>
+                </div>
+              )}
+
+              {adminTab === "offers" && (
+                <div className="rounded-[2rem] bg-white p-5 shadow-sm md:p-8">
+                  <h3 className="text-2xl font-black">Offer Control</h3>
+                  <p className="mt-1 text-sm text-slate-500">Homepage offer section-er text ekhane edit koro.</p>
+                  <form onSubmit={handleSaveSiteSettings} className="mt-5 grid gap-4 md:grid-cols-2">
+                    <input value={settingsForm.offerLabel} onChange={(e) => setSettingsForm({ ...settingsForm, offerLabel: e.target.value })} placeholder="Offer label" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    <input value={settingsForm.offerButton} onChange={(e) => setSettingsForm({ ...settingsForm, offerButton: e.target.value })} placeholder="Button text" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    <input value={settingsForm.offerTitle} onChange={(e) => setSettingsForm({ ...settingsForm, offerTitle: e.target.value })} placeholder="Offer title" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <textarea value={settingsForm.offerDescription} onChange={(e) => setSettingsForm({ ...settingsForm, offerDescription: e.target.value })} placeholder="Offer description" rows="4" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <Button type="submit" className="rounded-2xl bg-slate-900 font-black text-white hover:bg-slate-700">Save Offer</Button>
+                  </form>
+                </div>
+              )}
+
+              {adminTab === "settings" && (
+                <div className="rounded-[2rem] bg-white p-5 shadow-sm md:p-8">
+                  <h3 className="text-2xl font-black">Website Settings</h3>
+                  <p className="mt-1 text-sm text-slate-500">Business name, hero text, Facebook and location change korte parba.</p>
+                  <form onSubmit={handleSaveSiteSettings} className="mt-5 grid gap-4 md:grid-cols-2">
+                    <input value={settingsForm.businessName} onChange={(e) => setSettingsForm({ ...settingsForm, businessName: e.target.value })} placeholder="Business name" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    <input value={settingsForm.slogan} onChange={(e) => setSettingsForm({ ...settingsForm, slogan: e.target.value })} placeholder="Slogan" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    <input value={settingsForm.heroBadge} onChange={(e) => setSettingsForm({ ...settingsForm, heroBadge: e.target.value })} placeholder="Hero badge" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <input value={settingsForm.heroTitle} onChange={(e) => setSettingsForm({ ...settingsForm, heroTitle: e.target.value })} placeholder="Hero title" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <textarea value={settingsForm.heroSubtitle} onChange={(e) => setSettingsForm({ ...settingsForm, heroSubtitle: e.target.value })} placeholder="Hero subtitle" rows="3" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900 md:col-span-2" />
+                    <input value={settingsForm.facebook} onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })} placeholder="Facebook link/text" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    <input value={settingsForm.location} onChange={(e) => setSettingsForm({ ...settingsForm, location: e.target.value })} placeholder="Location" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    {settingsMessage && <p className="rounded-2xl bg-emerald-50 p-3 text-sm font-bold text-emerald-700 md:col-span-2">{settingsMessage}</p>}
+                    <Button type="submit" className="rounded-2xl bg-slate-900 font-black text-white hover:bg-slate-700">Save Website Settings</Button>
+                  </form>
+                </div>
+              )}
             </div>
           )}
         </section>
-        )}
-
-        {isAdmin && (
-          <section id="orders" className="mx-auto max-w-7xl px-4 py-12 md:px-8">
-            <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-              <div>
-                <p className="mb-2 text-sm font-black uppercase tracking-[0.2em] text-slate-500">Order Management</p>
-                <h2 className="text-3xl font-black md:text-4xl">Customer orders</h2>
-                <p className="mt-2 text-sm text-slate-500">Visitor order form submit korle ekhane show korbe. CSV download kore Excel-e open korte parba.</p>
-              </div>
-              <Button onClick={exportOrdersToCSV} className="rounded-full bg-slate-900 px-6 py-3 font-black text-white hover:bg-slate-700">
-                <Download className="mr-2 h-4 w-4" /> Export Excel/CSV
-              </Button>
-            </div>
-
-            <div className="overflow-hidden rounded-[2rem] bg-white shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[980px] text-left text-sm">
-                  <thead className="bg-slate-900 text-white">
-                    <tr>
-                      <th className="p-4">Product</th>
-                      <th className="p-4">Customer</th>
-                      <th className="p-4">Phone</th>
-                      <th className="p-4">Size</th>
-                      <th className="p-4">Color</th>
-                      <th className="p-4">Qty</th>
-                      <th className="p-4">Address</th>
-                      <th className="p-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {orders.length === 0 && (
-                      <tr>
-                        <td className="p-4 text-slate-500" colSpan="8">No orders yet.</td>
-                      </tr>
-                    )}
-                    {orders.map((order) => (
-                      <tr key={order.id}>
-                        <td className="p-4 font-bold">{order.productName}</td>
-                        <td className="p-4">{order.customerName}</td>
-                        <td className="p-4">{order.phone}</td>
-                        <td className="p-4">{order.size}</td>
-                        <td className="p-4">{order.color || "-"}</td>
-                        <td className="p-4">{order.quantity}</td>
-                        <td className="p-4">{order.address}</td>
-                        <td className="p-4"><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">{order.status || "New"}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
         )}
 
         <section id="offers" className="mx-auto max-w-7xl px-4 py-12 md:px-8">
           <div className="rounded-[2rem] bg-slate-900 p-8 text-white shadow-xl md:p-12">
             <div className="grid gap-8 md:grid-cols-2 md:items-center">
               <div>
-                <p className="mb-2 text-sm font-black uppercase tracking-[0.2em] text-cyan-200">Special Offer</p>
-                <h2 className="text-3xl font-black md:text-4xl">Buy 2 pairs and get free delivery.</h2>
+                <p className="mb-2 text-sm font-black uppercase tracking-[0.2em] text-cyan-200">{siteSettings.offerLabel}</p>
+                <h2 className="text-3xl font-black md:text-4xl">{siteSettings.offerTitle}</h2>
                 <p className="mt-4 max-w-xl leading-7 text-slate-200">
-                  Limited time offer for our online customers. Send us your size and preferred product through WhatsApp.
+                  {siteSettings.offerDescription}
                 </p>
               </div>
               <div className="flex justify-start md:justify-end">
@@ -885,8 +966,8 @@ export default function PairPalaceWebsite() {
               </p>
               <div className="mt-6 space-y-3 text-sm font-semibold text-slate-700">
                 <p>Phone: {PHONE_DISPLAY}</p>
-                <p>Facebook: facebook.com/pairpalace</p>
-                <p>Location: Bangladesh</p>
+                <p>Facebook: {siteSettings.facebook}</p>
+                <p>Location: {siteSettings.location}</p>
               </div>
             </div>
             <div className="rounded-[2rem] bg-slate-100 p-8">
@@ -1037,6 +1118,7 @@ export default function PairPalaceWebsite() {
 
                 <div className="space-y-4 rounded-3xl bg-slate-50 p-5 text-sm text-slate-700">
                   <p><b>Available sizes:</b> {selectedProduct.sizes}</p>
+                  <p><b>Description:</b> {selectedProduct.description || "Comfortable and stylish shoe for everyday use."}</p>
                   <p><b>Delivery:</b> Cash on Delivery available across Bangladesh.</p>
                   <p><b>How to order:</b> Click Buy Now to open the order form, or use WhatsApp Order.</p>
                 </div>
@@ -1096,7 +1178,7 @@ export default function PairPalaceWebsite() {
 
       <footer className="bg-slate-950 px-4 py-8 text-center text-sm font-medium text-slate-400 md:px-8">
         <p>© 2026 Pair Palace. All rights reserved.</p>
-        <p className="mt-2">Designed & developed by Swapno</p>
+        <p className="mt-2">Designed & Developed by Swapno</p>
       </footer>
     </div>
   );
