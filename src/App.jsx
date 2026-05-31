@@ -18,7 +18,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { motion } from "framer-motion";
-import { Search, ShoppingBag, Star, Truck, ShieldCheck, MessageCircle, Menu, X, Filter, Download, ClipboardList } from "lucide-react";
+import { Search, ShoppingBag, Star, Truck, ShieldCheck, MessageCircle, Menu, X, Filter, Download, ClipboardList, ShoppingCart, Trash2 } from "lucide-react";
 const Button = ({ className = "", children, ...props }) => (
   <button className={className} {...props}>{children}</button>
 );
@@ -137,9 +137,15 @@ export default function PairPalaceWebsite() {
   const [adminError, setAdminError] = useState("");
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [adminVisible, setAdminVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showBuyNowForm, setShowBuyNowForm] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cartItems, setCartItems] = useState([]);
+  const [cartCheckoutOpen, setCartCheckoutOpen] = useState(false);
   const [orders, setOrders] = useState([]);
   const [orderMessage, setOrderMessage] = useState("");
+  const [cartOrderMessage, setCartOrderMessage] = useState("");
   const [orderForm, setOrderForm] = useState({
     customerName: "",
     phone: "",
@@ -161,6 +167,10 @@ export default function PairPalaceWebsite() {
   });
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const secretAdmin = params.get("admin") === "swapno" || window.location.hash === "#admin";
+    setAdminVisible(secretAdmin);
+
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setIsAdmin(Boolean(user));
     });
@@ -268,6 +278,93 @@ export default function PairPalaceWebsite() {
     );
   };
 
+  const addToCart = (product) => {
+    setCartItems((prevItems) => {
+      const existingItem = prevItems.find((item) => item.id === product.id);
+      if (existingItem) {
+        return prevItems.map((item) =>
+          item.id === product.id ? { ...item, cartQty: item.cartQty + 1 } : item
+        );
+      }
+      return [...prevItems, { ...product, cartQty: 1 }];
+    });
+    setCartOpen(true);
+  };
+
+  const removeFromCart = (productId) => {
+    setCartItems((prevItems) => prevItems.filter((item) => item.id !== productId));
+  };
+
+  const updateCartQty = (productId, qty) => {
+    const safeQty = Math.max(1, Number(qty || 1));
+    setCartItems((prevItems) =>
+      prevItems.map((item) => (item.id === productId ? { ...item, cartQty: safeQty } : item))
+    );
+  };
+
+  const openProductDetails = (product) => {
+    setSelectedProduct(product);
+    setShowBuyNowForm(false);
+    setOrderMessage("");
+  };
+
+  const buyNow = (product) => {
+    setSelectedProduct(product);
+    setShowBuyNowForm(true);
+    setCartOpen(false);
+    setOrderMessage("");
+    setOrderForm({ customerName: "", phone: "", size: "", color: "", quantity: "1", address: "", note: "" });
+  };
+
+  const cartTotal = cartItems.reduce((total, item) => total + Number(item.price || 0) * Number(item.cartQty || 1), 0);
+  const cartCount = cartItems.reduce((total, item) => total + Number(item.cartQty || 1), 0);
+
+  const handleCartOrderSubmit = async (e) => {
+    e.preventDefault();
+    if (cartItems.length === 0) {
+      setCartOrderMessage("Your cart is empty.");
+      return;
+    }
+    if (!orderForm.customerName || !orderForm.phone || !orderForm.address) {
+      setCartOrderMessage("Please fill name, phone and address.");
+      return;
+    }
+
+    const items = cartItems.map((item) => ({
+      productId: item.id,
+      productName: item.name,
+      productCategory: item.category,
+      productPrice: Number(item.price),
+      quantity: Number(item.cartQty || 1),
+      subtotal: Number(item.price || 0) * Number(item.cartQty || 1),
+    }));
+
+    const orderData = {
+      orderType: "Cart",
+      productId: "cart-order",
+      productName: items.map((item) => `${item.productName} x${item.quantity}`).join(" | "),
+      productCategory: "Multiple",
+      productPrice: cartTotal,
+      items,
+      totalAmount: cartTotal,
+      customerName: orderForm.customerName,
+      phone: orderForm.phone,
+      size: orderForm.size || "See note / confirm by phone",
+      color: orderForm.color,
+      quantity: cartCount,
+      address: orderForm.address,
+      note: orderForm.note,
+      status: "New",
+      createdAt: serverTimestamp(),
+    };
+
+    await addDoc(collection(db, "orders"), orderData);
+    setCartOrderMessage("Cart order placed successfully. We will contact you soon.");
+    setCartItems([]);
+    setCartCheckoutOpen(false);
+    setOrderForm({ customerName: "", phone: "", size: "", color: "", quantity: "1", address: "", note: "" });
+  };
+
   const handleOrderSubmit = async (e) => {
     e.preventDefault();
     if (!selectedProduct || !orderForm.customerName || !orderForm.phone || !orderForm.size || !orderForm.address) {
@@ -297,12 +394,13 @@ export default function PairPalaceWebsite() {
   };
 
   const exportOrdersToCSV = () => {
-    const headers = ["Order ID", "Product", "Category", "Price", "Customer", "Phone", "Size", "Color", "Quantity", "Address", "Note", "Status"];
+    const headers = ["Order ID", "Order Type", "Product", "Category", "Price/Total", "Customer", "Phone", "Size", "Color", "Quantity", "Address", "Note", "Status", "Cart Items"];
     const rows = orders.map((order) => [
       order.id,
+      order.orderType || "Single",
       order.productName || "",
       order.productCategory || "",
-      order.productPrice || "",
+      order.totalAmount || order.productPrice || "",
       order.customerName || "",
       order.phone || "",
       order.size || "",
@@ -311,6 +409,7 @@ export default function PairPalaceWebsite() {
       order.address || "",
       order.note || "",
       order.status || "New",
+      order.items ? order.items.map((item) => `${item.productName} x${item.quantity} = ৳${item.subtotal}`).join("; ") : "",
     ]);
 
     const csvContent = [headers, ...rows]
@@ -358,18 +457,36 @@ export default function PairPalaceWebsite() {
             <a href="#offers" className="hover:text-slate-950">Offers</a>
             <a href="#size" className="hover:text-slate-950">Size Guide</a>
             <a href="#contact" className="hover:text-slate-950">Contact</a>
-            <a href="#admin" className="hover:text-slate-950">Admin Login</a>
+            {(adminVisible || isAdmin) && <a href="#admin" className="hover:text-slate-950">Admin</a>}
             {isAdmin && <a href="#orders" className="hover:text-slate-950">Orders</a>}
           </nav>
 
-          <a
-            href={whatsappLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden rounded-full bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-800 md:inline-flex"
-          >
-            Order Now
-          </a>
+          <div className="hidden items-center gap-3 md:flex">
+            <button
+              onClick={() => setCartOpen(true)}
+              className="relative rounded-full bg-slate-100 px-5 py-2.5 text-sm font-black text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-200"
+            >
+              <ShoppingCart className="mr-2 inline h-4 w-4" /> Cart
+              {cartCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-black text-white">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+            <a
+              href={whatsappLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-800"
+            >
+              Order Now
+            </a>
+          </div>
+
+          <button onClick={() => setCartOpen(true)} className="relative rounded-full bg-slate-100 p-2 text-slate-900 md:hidden" aria-label="Open cart">
+            <ShoppingCart className="h-5 w-5" />
+            {cartCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-black text-white">{cartCount}</span>}
+          </button>
 
           <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu">
             {menuOpen ? <X /> : <Menu />}
@@ -382,7 +499,7 @@ export default function PairPalaceWebsite() {
               <a href="#products" onClick={() => setMenuOpen(false)}>Products</a>
               <a href="#offers" onClick={() => setMenuOpen(false)}>Offers</a>
               <a href="#size" onClick={() => setMenuOpen(false)}>Size Guide</a>
-              <a href="#admin" onClick={() => setMenuOpen(false)}>Admin Login</a>
+              {(adminVisible || isAdmin) && <a href="#admin" onClick={() => setMenuOpen(false)}>Admin</a>}
               <a href="#contact" onClick={() => setMenuOpen(false)}>Contact</a>
             </div>
           </div>
@@ -483,7 +600,7 @@ export default function PairPalaceWebsite() {
             {filteredProducts.map((product) => (
               <motion.div key={product.id} layout initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
                 <Card
-                  onClick={() => setSelectedProduct(product)}
+                  onClick={() => openProductDetails(product)}
                   className="group cursor-pointer overflow-hidden rounded-[2rem] border-0 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
                 >
                   <div className="relative h-64 overflow-hidden">
@@ -504,16 +621,25 @@ export default function PairPalaceWebsite() {
                         <span className="text-2xl font-black">৳{product.price}</span>
                         <span className="ml-2 text-sm font-semibold text-slate-400 line-through">৳{product.oldPrice}</span>
                       </div>
-                      <div className="flex gap-2">
-                        <a
-                          href={getProductWhatsappLink(product.name)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToCart(product);
+                          }}
+                          className="rounded-full bg-slate-100 px-4 py-2 text-sm font-black text-slate-900 transition hover:bg-slate-200"
+                        >
+                          Add Cart
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            buyNow(product);
+                          }}
                           className="rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
                         >
-                          Order
-                        </a>
+                          Buy Now
+                        </button>
                         {isAdmin && (
                           <button
                             onClick={(e) => {
@@ -534,6 +660,7 @@ export default function PairPalaceWebsite() {
           </div>
         </section>
 
+        {(adminVisible || isAdmin) && (
         <section id="admin" className="mx-auto max-w-7xl px-4 py-12 md:px-8">
           <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
@@ -650,6 +777,7 @@ export default function PairPalaceWebsite() {
             </div>
           )}
         </section>
+        )}
 
         {isAdmin && (
           <section id="orders" className="mx-auto max-w-7xl px-4 py-12 md:px-8">
@@ -775,6 +903,102 @@ export default function PairPalaceWebsite() {
             </div>
           </div>
         </section>
+      {cartOpen && (
+        <div className="fixed inset-0 z-[90] flex justify-end bg-slate-950/60 backdrop-blur-sm" onClick={() => setCartOpen(false)}>
+          <motion.div
+            initial={{ x: 420, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ duration: 0.25 }}
+            onClick={(e) => e.stopPropagation()}
+            className="h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-2xl"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black">Your Cart</h2>
+                <p className="text-sm font-semibold text-slate-500">{cartCount} item(s) selected</p>
+              </div>
+              <button onClick={() => setCartOpen(false)} className="rounded-full bg-slate-100 p-2 hover:bg-slate-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {cartItems.length === 0 ? (
+              <div className="rounded-3xl bg-slate-50 p-8 text-center">
+                <ShoppingCart className="mx-auto mb-3 h-10 w-10 text-slate-400" />
+                <p className="font-bold text-slate-600">Cart empty. Add shoes first.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {cartItems.map((item) => (
+                  <div key={item.id} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+                    <div className="flex gap-4">
+                      <img src={item.image} alt={item.name} className="h-20 w-20 rounded-2xl object-cover" />
+                      <div className="flex-1">
+                        <h3 className="font-black leading-tight">{item.name}</h3>
+                        <p className="mt-1 text-sm font-bold text-slate-500">৳{item.price}</p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <input
+                            value={item.cartQty}
+                            onChange={(e) => updateCartQty(item.id, e.target.value)}
+                            type="number"
+                            min="1"
+                            className="h-9 w-20 rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-slate-900"
+                          />
+                          <button onClick={() => buyNow(item)} className="rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-slate-700">
+                            Buy Now
+                          </button>
+                          <button onClick={() => removeFromCart(item.id)} className="rounded-full bg-red-50 p-2 text-red-600 hover:bg-red-100">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="sticky bottom-0 rounded-3xl bg-slate-950 p-5 text-white shadow-xl">
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-sm font-bold text-slate-300">Total</span>
+                    <span className="text-2xl font-black">৳{cartTotal}</span>
+                  </div>
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => {
+                        setCartCheckoutOpen(!cartCheckoutOpen);
+                        setCartOrderMessage("");
+                        setOrderForm({ customerName: "", phone: "", size: "", color: "", quantity: "1", address: "", note: "" });
+                      }}
+                      className="w-full rounded-full bg-white px-5 py-3 text-sm font-black text-slate-950 hover:bg-slate-100"
+                    >
+                      Checkout All Cart Items
+                    </button>
+                    <p className="text-xs text-slate-300">Buy Now click korle specific product order hobe. Checkout All dile cart-er sob product ek order hobe.</p>
+                  </div>
+                </div>
+              {cartCheckoutOpen && cartItems.length > 0 && (
+                  <form onSubmit={handleCartOrderSubmit} className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-700">
+                      <ClipboardList className="h-4 w-4" /> Checkout All Form
+                    </div>
+                    <div className="grid gap-3">
+                      <input value={orderForm.customerName} onChange={(e) => setOrderForm({ ...orderForm, customerName: e.target.value })} placeholder="Your name" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={orderForm.phone} onChange={(e) => setOrderForm({ ...orderForm, phone: e.target.value })} placeholder="Phone number" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={orderForm.size} onChange={(e) => setOrderForm({ ...orderForm, size: e.target.value })} placeholder="Size note, example: first 42, second 41" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={orderForm.color} onChange={(e) => setOrderForm({ ...orderForm, color: e.target.value })} placeholder="Color note, optional" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <textarea value={orderForm.address} onChange={(e) => setOrderForm({ ...orderForm, address: e.target.value })} placeholder="Delivery address" rows="3" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900" />
+                      <textarea value={orderForm.note} onChange={(e) => setOrderForm({ ...orderForm, note: e.target.value })} placeholder="Extra note, optional" rows="2" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900" />
+                      {cartOrderMessage && <p className="rounded-2xl bg-white p-3 text-sm font-semibold text-slate-700">{cartOrderMessage}</p>}
+                      <Button type="submit" className="rounded-full bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg transition hover:bg-slate-700">
+                        Place Cart Order ৳{cartTotal}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
       {selectedProduct && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={() => setSelectedProduct(null)}>
           <motion.div
@@ -814,29 +1038,43 @@ export default function PairPalaceWebsite() {
                 <div className="space-y-4 rounded-3xl bg-slate-50 p-5 text-sm text-slate-700">
                   <p><b>Available sizes:</b> {selectedProduct.sizes}</p>
                   <p><b>Delivery:</b> Cash on Delivery available across Bangladesh.</p>
-                  <p><b>How to order:</b> Fill the order form below or click WhatsApp Order.</p>
+                  <p><b>How to order:</b> Click Buy Now to open the order form, or use WhatsApp Order.</p>
                 </div>
 
-                <form onSubmit={handleOrderSubmit} className="mt-6 grid gap-3">
-                  <div className="flex items-center gap-2 text-sm font-black text-slate-700">
-                    <ClipboardList className="h-4 w-4" /> Order Form
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <input value={orderForm.customerName} onChange={(e) => setOrderForm({ ...orderForm, customerName: e.target.value })} placeholder="Your name" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
-                    <input value={orderForm.phone} onChange={(e) => setOrderForm({ ...orderForm, phone: e.target.value })} placeholder="Phone number" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
-                    <input value={orderForm.size} onChange={(e) => setOrderForm({ ...orderForm, size: e.target.value })} placeholder="Size, example: 42" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
-                    <input value={orderForm.color} onChange={(e) => setOrderForm({ ...orderForm, color: e.target.value })} placeholder="Color, optional" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
-                    <input value={orderForm.quantity} onChange={(e) => setOrderForm({ ...orderForm, quantity: e.target.value })} placeholder="Quantity" type="number" min="1" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
-                    <input value={orderForm.note} onChange={(e) => setOrderForm({ ...orderForm, note: e.target.value })} placeholder="Note, optional" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
-                  </div>
-                  <textarea value={orderForm.address} onChange={(e) => setOrderForm({ ...orderForm, address: e.target.value })} placeholder="Delivery address" rows="3" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900" />
-                  {orderMessage && <p className="rounded-2xl bg-slate-50 p-3 text-sm font-semibold text-slate-700">{orderMessage}</p>}
-                  <Button type="submit" className="rounded-full bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg transition hover:bg-slate-700">
-                    Place Order
-                  </Button>
-                </form>
+                {showBuyNowForm && (
+                  <form onSubmit={handleOrderSubmit} className="mt-6 grid gap-3 rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="flex items-center gap-2 text-sm font-black text-slate-700">
+                      <ClipboardList className="h-4 w-4" /> Order Form
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input value={orderForm.customerName} onChange={(e) => setOrderForm({ ...orderForm, customerName: e.target.value })} placeholder="Your name" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={orderForm.phone} onChange={(e) => setOrderForm({ ...orderForm, phone: e.target.value })} placeholder="Phone number" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={orderForm.size} onChange={(e) => setOrderForm({ ...orderForm, size: e.target.value })} placeholder="Size, example: 42" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={orderForm.color} onChange={(e) => setOrderForm({ ...orderForm, color: e.target.value })} placeholder="Color, optional" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={orderForm.quantity} onChange={(e) => setOrderForm({ ...orderForm, quantity: e.target.value })} placeholder="Quantity" type="number" min="1" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                      <input value={orderForm.note} onChange={(e) => setOrderForm({ ...orderForm, note: e.target.value })} placeholder="Note, optional" className="h-11 rounded-2xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-900" />
+                    </div>
+                    <textarea value={orderForm.address} onChange={(e) => setOrderForm({ ...orderForm, address: e.target.value })} placeholder="Delivery address" rows="3" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-900" />
+                    {orderMessage && <p className="rounded-2xl bg-white p-3 text-sm font-semibold text-slate-700">{orderMessage}</p>}
+                    <Button type="submit" className="rounded-full bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg transition hover:bg-slate-700">
+                      Place Order
+                    </Button>
+                  </form>
+                )}
 
                 <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    onClick={() => addToCart(selectedProduct)}
+                    className="rounded-full bg-slate-100 px-6 py-3 text-sm font-black text-slate-900 transition hover:bg-slate-200"
+                  >
+                    Add to Cart
+                  </button>
+                  <button
+                    onClick={() => setShowBuyNowForm(true)}
+                    className="rounded-full bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg transition hover:bg-slate-700"
+                  >
+                    Buy Now
+                  </button>
                   <a
                     href={getProductWhatsappLink(selectedProduct.name)}
                     target="_blank"
@@ -858,7 +1096,7 @@ export default function PairPalaceWebsite() {
 
       <footer className="bg-slate-950 px-4 py-8 text-center text-sm font-medium text-slate-400 md:px-8">
         <p>© 2026 Pair Palace. All rights reserved.</p>
-        <p className="mt-2">Designed & Developed by Swapno</p>
+        <p className="mt-2">Designed & developed by Swapno</p>
       </footer>
     </div>
   );
